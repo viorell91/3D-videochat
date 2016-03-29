@@ -1,0 +1,204 @@
+#!/usr/bin/python
+
+### import guacamole libraries
+import avango
+import avango.gua
+import avango.script
+from avango.script import field_has_changed
+from lib.Intersection import Intersection
+
+import time
+
+### import python libraries
+# ...
+   
+class SteeringNavigation(avango.script.Script):
+
+    ### fields ###
+
+    ## input fields
+    mf_dof = avango.MFFloat()
+    mf_dof.value = [0.0,0.0,0.0,0.0,0.0,0.0,0.0] # init 7 channels
+
+    ## output fields
+    sf_nav_mat = avango.gua.SFMatrix4()
+    sf_nav_mat.value = avango.gua.make_identity_mat()
+
+    
+    ### constructor
+    def __init__(self):
+        self.super(SteeringNavigation).__init__()
+
+        ### parameters ###
+        self.rot_center_offset = avango.gua.Vec3(0.0,0.0,0.0)
+
+        self.attenuation_factor = 1.0
+
+
+    def my_constructor(self, MF_DOF, ATTENUATION_FACTOR = 1.0, SCENEGRAPH = None, SCENE_ROOT = None):
+
+        self.mf_dof.connect_from(MF_DOF)
+        
+        self.attenuation_factor = ATTENUATION_FACTOR
+
+        '''
+        self.objectDetection = ObjectDetection()
+        self.objectDetection.my_constructor(SCENEGRAPH = SCENEGRAPH)
+
+        self.objectDetection.sf_mat.connect_from(self.sf_nav_mat)
+        self.objectDetection.mf_dof.connect_from(self.mf_dof)
+        '''
+
+        self.intersection = Intersection(SCENEGRAPH, BLACK_LIST = ["unpickable", "invisible"])
+
+        ### intersection geometry ###
+        _trimesh_loader = avango.gua.nodes.TriMeshLoader() # get trimesh loader to load external tri-meshes
+
+        self.intersection_geometry = _trimesh_loader.create_geometry_from_file("intersection_geometry", "data/objects/sphere.obj", avango.gua.LoaderFlags.DEFAULTS)
+        if SCENE_ROOT is not None:
+            SCENE_ROOT.Children.value.append(self.intersection_geometry)
+
+
+
+    
+    ### callbacks
+    @field_has_changed(mf_dof)
+    def mf_dof_changed(self):
+        ## handle translation input
+        _x = self.mf_dof.value[0]
+        _y = self.mf_dof.value[1]
+        _z = self.mf_dof.value[2]
+
+        _trans_vec    = avango.gua.Vec3(_x, _y, _z) * self.attenuation_factor
+        _trans_input  = _trans_vec.length()
+         
+        if _trans_input > 0.0:
+
+            ## transfer-function for translation
+            #_exponent  = 3
+            _exponent   = 2
+
+            _multiple = int(_trans_input)
+            _rest       = _trans_input - _multiple
+            _factor     = _multiple + pow(_rest, _exponent)
+          
+
+            self.intersection.set_pick_mat(self.sf_nav_mat.value)
+            self.intersection.set_pick_direction(_trans_vec)
+            self.intersection.set_pick_length(20.0)
+            
+            _mf_pick_result = self.intersection.compute_intersection()
+
+            _trans_vec.normalize()
+            _trans_vec = _trans_vec * _factor * 0.1
+            
+            print("Length", len(_mf_pick_result.value))
+            for _pick_result in _mf_pick_result.value:
+                _node = _pick_result.Object.value
+                _distance = _pick_result.Distance.value * 20.0
+                _world_intersection_pos = _pick_result.WorldPosition.value
+                
+                _distance2 = (_world_intersection_pos - self.sf_nav_mat.value.get_translate()).length()
+
+                print(_node, _node.Name.value, _node.Path.value, _distance, _distance2, _world_intersection_pos)
+
+                self.intersection_geometry.Transform.value = avango.gua.make_trans_mat(_world_intersection_pos) * \
+                                                             avango.gua.make_scale_mat(0.1)
+
+
+                if _distance < 1.0:
+                    _trans_vec = avango.gua.Vec3(0.0, 0.0, 0.0)
+
+            '''
+            if len(_mf_pick_result.value) > 0: # intersection found
+                print("Intersection found")
+
+                _pick_result = self.mf_pick_result.value[0] # get first intersection target from list
+
+                if _pick_result.Distance.value <= self.direction.length():
+                    _trans_vec = avango.gua.Vec3(0.0, 0.0, 0.0)
+            '''
+
+
+        ## handle rotation input
+        _rx = self.mf_dof.value[3]
+        _ry = self.mf_dof.value[4]
+        _rz = self.mf_dof.value[5]
+
+        _rot_vec    = avango.gua.Vec3(_rx, _ry, _rz) * self.attenuation_factor
+        _rot_input  = _rot_vec.length()
+             
+
+        if _trans_input or _rot_input > 0.0:
+            ## accumulate input
+            self.sf_nav_mat.value = self.sf_nav_mat.value * \
+                                    avango.gua.make_trans_mat(_trans_vec) * \
+                                    avango.gua.make_trans_mat(self.rot_center_offset) * \
+                                    avango.gua.make_rot_mat(_rot_vec.y,0,1,0) * \
+                                    avango.gua.make_rot_mat(_rot_vec.x,1,0,0) * \
+                                    avango.gua.make_rot_mat(_rot_vec.z,0,0,1) * \
+                                    avango.gua.make_trans_mat(self.rot_center_offset * -1)
+
+            #print("MATRIX", self.sf_nav_mat.value)
+
+        
+
+    ### functions ###
+    def set_start_transformation(self, MATRIX):
+        self.sf_nav_mat.value = MATRIX
+
+  
+    def set_rotation_center_offset(self, OFFSET_VEC): 
+        self.rot_center_offset = OFFSET_VEC
+
+'''
+class ObjectDetection(avango.script.Script):
+
+    ## input fields
+    sf_mat = avango.gua.SFMatrix4()
+    sf_mat.value = avango.gua.make_identity_mat()
+
+    mf_dof = avango.MFFloat()
+    mf_dof.value = [0.0,0.0,0.0,0.0,0.0,0.0,0.0] # init 7 channels
+
+    ## ouput fields
+    sf_corrected_mat = avango.gua.SFMatrix4()
+    sf_corrected_mat.value = avango.gua.make_identity_mat()
+
+    ## internal fields
+    mf_pick_result = avango.gua.MFPickResult()
+
+     ## constructor
+    def __init__(self):
+        self.super(ObjectDetection).__init__()
+
+
+    def my_constructor(self, SCENEGRAPH):
+
+        ## init internal classes
+        self.intersection = Intersection()
+        self.scenegraph = SCENEGRAPH
+
+        ## init field connections
+        self.mf_pick_result.connect_from(self.intersection.mf_pick_result)
+  
+
+    @field_has_changed(mf_pick_result)
+    def mf_pick_result_changed(self):
+
+        self.direction = avango.gua.Vec3(-self.mf_dof.value[0], -self.mf_dof.value[1], -self.mf_dof.value[2])
+        self.intersection.my_constructor(self.scenegraph, self.sf_mat, 1.0, self.direction)
+        self.sf_corrected_mat.value = self.sf_mat.value
+        #print("First")
+        #print(self.sf_corrected_mat.value)
+
+        if len(self.mf_pick_result.value) > 0: # intersection found
+            print("Intersection found")
+            _pick_result = self.mf_pick_result.value[0] # get first intersection target from list
+
+            if _pick_result.Distance.value <= self.direction.length():
+                sf_corrected_mat.value = self.sf_nav_mat.value * \
+                                         avango.gua.make_trans_mat(self.direction)
+        #print("Second")
+        #print(self.sf_corrected_mat.value)
+'''        

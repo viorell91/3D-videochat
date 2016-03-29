@@ -1,0 +1,90 @@
+#!/usr/bin/python
+
+### import guacamole libraries
+import avango
+import avango.gua
+import avango.script
+
+### import python libraries
+import math
+
+
+
+class Intersection:
+
+    ## constructor
+    def __init__(self, SCENEGRAPH, WHITE_LIST = [], BLACK_LIST = []):
+
+        ### external references ###
+        self.SCENEGRAPH = SCENEGRAPH
+
+
+        ### parameters ###
+        
+        self.white_list = WHITE_LIST
+        self.black_list = BLACK_LIST
+
+        self.pick_mat = avango.gua.make_identity_mat()
+        self.pick_length = 1.0
+        self.pick_direction = avango.gua.Vec3(0.0,0.0,-1.0)
+                
+
+        ## @var pick_options
+        # Picking options for the intersection process.        
+        self.pick_options = "avango.gua.PickingOptions.GET_POSITIONS"
+        self.pick_options += " | avango.gua.PickingOptions.GET_NORMALS"
+        self.pick_options += " | avango.gua.PickingOptions.GET_WORLD_POSITIONS"
+        self.pick_options += " | avango.gua.PickingOptions.GET_WORLD_NORMALS"
+        #self.pick_options += " | avango.gua.PickingOptions.GET_TEXTURE_COORDS"
+        self.pick_options += " | avango.gua.PickingOptions.PICK_ONLY_FIRST_OBJECT"
+
+        self.pick_options = eval(self.pick_options)
+
+
+        ### resources ###  
+                
+        self.ray = avango.gua.nodes.Ray()
+  
+    
+ 
+    ### functions ###
+
+    def set_pick_mat(self, MAT4):
+        self.pick_mat = MAT4
+
+
+    def set_pick_direction(self, VEC3):
+        self.pick_direction = VEC3
+        self.pick_direction.normalize()
+
+
+    def set_pick_length(self, FLOAT):
+        self.pick_length = FLOAT
+
+
+    def compute_intersection(self):
+        self.ray.Origin.value = self.pick_mat.get_translate()
+        _pick_dir = avango.gua.make_rot_mat(self.pick_mat.get_rotate_scale_corrected()) * self.pick_direction
+        _pick_dir = avango.gua.Vec3(_pick_dir.x, _pick_dir.y, _pick_dir.z)
+
+        self.ray.Direction.value = _pick_dir * self.pick_length
+        
+        _pick_result = self.SCENEGRAPH.ray_test(self.ray, self.pick_options, self.white_list, self.black_list)
+        
+        return _pick_result
+    
+    def calc_pick_result(self, PICK_MAT = avango.gua.make_identity_mat(), PICK_LENGTH = 10.0, PICK_DIRECTION = avango.gua.Vec3(0.0,0.0,-1.0)):
+
+        # update ray parameters
+        self.ray.Origin.value = PICK_MAT.get_translate()
+
+        _vec = avango.gua.make_rot_mat(PICK_MAT.get_rotate_scale_corrected()) * PICK_DIRECTION
+        _vec = avango.gua.Vec3(_vec.x,_vec.y,_vec.z)
+
+        self.ray.Direction.value = _vec * PICK_LENGTH
+
+        # intersect
+        _mf_pick_result = self.SCENEGRAPH.ray_test(self.ray, self.pick_options, self.white_list, self.black_list)
+
+        return _mf_pick_result
+    

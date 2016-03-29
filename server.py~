@@ -1,0 +1,157 @@
+#!/usr/bin/python
+
+### import guacamole libraries
+import avango
+import avango.gua
+
+
+### import application libraries
+from lib.SimpleViewingSetup import DesktopViewingSetup, ServerViewingSetup, Mitsubishi3DTVViewingSetup, Samsung3DTVViewingSetup
+from lib.Scene import Scene
+from lib.Device import *
+from lib.Navigation import SteeringNavigation#, ObjectDetection
+
+
+### global variables ###
+NAVIGATION_MODE = "Spacemouse"
+#NAVIGATION_MODE = "New Spacemouse" # blue LED
+
+## import python libraries
+import subprocess
+
+
+def start():
+
+    server_ip = subprocess.Popen(["hostname", "-I"], stdout=subprocess.PIPE, universal_newlines=True).communicate()[0]
+    server_ip = server_ip.strip(" \n")
+    server_ip = server_ip.rsplit(" ")
+    server_ip = str(server_ip[-1])
+    
+    print("???", server_ip)
+
+    nettrans = avango.gua.nodes.NetTransform( Name = "net", Groupname = "AVSERVER|{0}|7433".format(server_ip))
+
+    ## create scenegraph
+    scenegraph = avango.gua.nodes.SceneGraph(Name = "scenegraph")
+    scenegraph.Root.value.Children.value.append(nettrans)
+
+
+    ## init scene
+    scene = Scene(PARENT_NODE = nettrans)
+
+
+    _video_loader = avango.gua.nodes.Video3DLoader() # get video-3D loader
+
+
+
+
+    ### init viewing && kinect setup for client1 (ERIS) ###
+
+    ## init navigation setup for client 1
+    device_input1 = SpacemouseInput()
+    device_input1.my_constructor("device-spacemouse1")
+        
+    navigation_client1 = SteeringNavigation()
+    #navigation_client1.set_start_transformation(avango.gua.make_trans_mat(0.0,0.1,0.3))
+    navigation_client1.set_start_transformation(avango.gua.make_trans_mat(0.0,0.0,0.0) * avango.gua.make_rot_mat(180.0,0,1,0))
+    navigation_client1.my_constructor(device_input1.mf_dof, 1.0, SCENEGRAPH = scenegraph) # connect navigation with spacemouse input
+
+
+    navigation1_node = avango.gua.nodes.TransformNode(Name = "eris")
+    nettrans.Children.value.append(navigation1_node)
+    #navigation1_node.Transform.connect_from(navigation_client1.objectDetection.sf_corrected_mat)
+    navigation1_node.Transform.connect_from(navigation_client1.sf_nav_mat)
+       
+
+    ## init kinect video avatar of client 1 "eris"
+    kinect1_node = _video_loader.load("kinect1_node", "/opt/kinect-resources/calib_3dvc/surface_50_51_54.ks")
+    kinect1_node.Transform.value = avango.gua.make_trans_mat(0.0 - 1.0, -0.975, 3.48 + 0.26) * avango.gua.make_rot_mat(90.0,0,1,0)
+    kinect1_node.Tags.value = ["eris", "unpickable"]
+    navigation1_node.Children.value.append(kinect1_node)
+
+
+
+    ### init viewing && kinect setup for client2 (ARACHNE) ###
+
+    ## init navigation setup for client 2
+    device_input2 = SpacemouseInput()
+    device_input2.my_constructor("device-spacemouse2")
+        
+    navigation_client2 = SteeringNavigation()
+    #navigation_client2.set_start_transformation(avango.gua.make_trans_mat(0.0,0.1,0.3))
+    navigation_client2.my_constructor(device_input2.mf_dof, 1.0, SCENEGRAPH = scenegraph) # connect navigation with spacemouse input
+
+
+    navigation2_node = avango.gua.nodes.TransformNode(Name = "arachne")
+    nettrans.Children.value.append(navigation2_node)
+    navigation2_node.Transform.connect_from(navigation_client2.sf_nav_mat)
+       
+    ## init kinect video avatar of client 2 "arachne"
+    kinect2_node = _video_loader.load("kinect1_node", "/opt/kinect-resources/calib_3dvc/surface_52_53.ks")
+    kinect2_node.Transform.value = avango.gua.make_trans_mat(0.0 + 0.48, -0.975, 3.48 + 0.48) * avango.gua.make_rot_mat(90.0,0,1,0)
+    kinect2_node.Tags.value = ["arachne"]
+    navigation2_node.Children.value.append(kinect2_node)
+
+
+
+    ## init viewing setup
+    '''
+    viewingSetup = DesktopViewingSetup( SCENEGRAPH = scenegraph
+                                      , PARENT_NODE = scenegraph.Root.value
+                                      )
+    '''
+
+    viewingSetup = ServerViewingSetup( SCENEGRAPH = scenegraph
+                                     , NAVIGATION_START_MAT = avango.gua.make_trans_mat(0.0,2.0,0.0) * avango.gua.make_rot_mat(90.0,-1,0,0) * avango.gua.make_scale_mat(3.0)
+                                     )
+
+    print_graph(scenegraph.Root.value)
+
+    # distribute every scenegraph node
+    distribute_all_nodes_below(NODE = nettrans, NETTRANS = nettrans)
+
+    ## start application/render loop
+    viewingSetup.run(locals(), globals())
+
+
+
+## Registers a scenegraph node and all of its children at a NetMatrixTransform node for distribution.
+# @param NET_TRANS_NODE The NetMatrixTransform node on which all nodes should be marked distributable.
+# @param PARENT_NODE The node that should be registered distributable with all of its children.
+def distribute_all_nodes_below(NODE = None, NETTRANS = None):
+       
+    # do not distribute the nettrans node itself
+    if NODE != NETTRANS:
+        NETTRANS.distribute_object(NODE)
+        #print ("distribute", NODE, NODE.Name.value, NODE.Path.value)
+
+
+    # iterate over children and make them distributable
+    for _child_node in NODE.Children.value:
+        distribute_all_nodes_below(NODE = _child_node, NETTRANS = NETTRANS)
+
+
+### helper functions ###
+
+## print the subgraph under a given node to the console
+def print_graph(root_node):
+  stack = [(root_node, 0)]
+  while stack:
+    node, level = stack.pop()
+    print("│   " * level + "├── {0} <{1}>".format(
+      node.Name.value, node.__class__.__name__))
+    stack.extend(
+      [(child, level + 1) for child in reversed(node.Children.value)])
+
+## print all fields of a fieldcontainer to the console
+def print_fields(node, print_values = False):
+  for i in range(node.get_num_fields()):
+    field = node.get_field(i)
+    print("→ {0} <{1}>".format(field._get_name(), field.__class__.__name__))
+    if print_values:
+      print("  with value '{0}'".format(field.value))
+
+
+if __name__ == '__main__':
+    start()
+

@@ -1,0 +1,44 @@
+To start 3D Video Chat example "/opt/kinect-resources/calib_3dvc/skype_3D/skype_3D_dist"
+
+Note:
++ first: the 3DVC-clients have to be started on arachne and on boreas
++ second: the 3DVC-server is started on arachne
++ third: the kinect-servers are started on both arachne and on boreas
+
+
+On arachne: open 3 terminals
+
+1. start 3DVC-client on arachne
+cd /opt/kinect-resources/calib_3dvc/skype_3D/skype_3D_dist
+./start_client.sh 141.54.147.27
+
+3. start 3DVC-server on arachne
+cd /opt/kinect-resources/calib_3dvc/skype_3D/skype_3D_dist
+./start_server.sh
+
+
+4. start kinect server on arachne
+cd /opt/kinect-resources
+./protonect.sh 012086450647 016215650647 -s 141.54.147.27:7000
+
+
+On boreas: open 2 terminals
+
+2. start 3DVC-client on boreas
+cd /opt/kinect-resources/calib_3dvc/skype_3D/skype_3D_dist
+./start_client.sh 141.54.147.27
+
+5. start kinect server on boreas
+cd /opt/kinect-resources
+./protonect.sh 011312650647 011482550647 012126250647 -s 141.54.147.32:7000
+
+
+
+Tips:
++ to simplify the launching procedure you can wirte a shell script
++++ ssh arachne killall python3
++++ ssh boreas killall python3
++++ use ssh to start the 3DVC-clients on both machines
++++ then start 3DVC-server on archne without ssh
+
+

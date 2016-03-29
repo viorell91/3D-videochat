@@ -1,0 +1,184 @@
+#!/usr/bin/python
+
+### import guacamole libraries
+import avango
+import avango.gua
+from avango.script import field_has_changed
+
+class SceneScript(avango.script.Script):
+    #input field
+    sf_button8 = avango.SFBool() ##
+
+    ## constructor
+    def __init__(self):
+        self.super(SceneScript).__init__()
+
+
+        self.keyboard_sensor = avango.daemon.nodes.DeviceSensor(DeviceService = avango.daemon.DeviceService())
+        self.keyboard_sensor.Station.value = "device-keyboard"
+
+        ## init field connections        
+        self.sf_button8.connect_from(self.keyboard_sensor.Button21) # v for mono or stereo  ##      
+
+
+        ### init variables
+        self.CLASS = None
+
+
+    def my_constructor(self, CLASS):
+
+        ### external reference
+        self.CLASS = CLASS
+
+
+
+    @field_has_changed(sf_button8) ##
+    def sf_button8_changed(self):
+        if self.sf_button8.value == True: # key pressed
+
+            if self.CLASS is not None:
+                self.CLASS.set_room_number()
+
+class Scene:
+
+    ## constructor
+    def __init__( self
+                , PARENT_NODE = None
+                ):
+
+
+        ### resources ###
+
+        ## init scene light
+        self.scene_light = avango.gua.nodes.LightNode(Name = "scene_light", Type = avango.gua.LightType.POINT)
+        self.scene_light.Color.value = avango.gua.Color(0.9, 0.9, 0.9)
+        self.scene_light.Brightness.value = 15.0
+        self.scene_light.Falloff.value = 1.0 # exponent
+        #self.scene_light.Softness.value = 2.0
+        self.scene_light.EnableShadows.value = False
+        self.scene_light.ShadowMapSize.value = 512
+        #self.scene_light.ShadowOffset.value = 0.002
+        #self.scene_light.ShadowMaxDistance.value = 5        
+        self.scene_light.Transform.value = avango.gua.make_trans_mat(0.0, 0.5, 0.0) * \
+                                           avango.gua.make_rot_mat(-90.0, 1, 0, 0) * \
+                                           avango.gua.make_scale_mat(2.0)
+        PARENT_NODE.Children.value.append(self.scene_light)
+
+    
+
+        ## init scene geometries
+        
+        _trimesh_loader = avango.gua.nodes.TriMeshLoader() # get trimesh loader to load external tri-meshes
+
+        ## init rooms
+        self.room_number = 1
+
+        #SUN
+        self.sun_light = avango.gua.nodes.LightNode(Name = "sun_light", Type = avango.gua.LightType.SUN)
+        self.sun_light.Color.value = avango.gua.Color(0.9, 0.9, 0.9)
+        self.sun_light.Brightness.value = 55.0
+        self.sun_light.Falloff.value = 1.0 # exponent
+        self.sun_light.EnableShadows.value = False
+        self.sun_light.ShadowMapSize.value = 512       
+        self.sun_light.Transform.value = avango.gua.make_trans_mat(0.0, 2.1, 0.0) * \
+                                         avango.gua.make_rot_mat(-90.0, 1, 0, 0)
+        PARENT_NODE.Children.value.append(self.sun_light)
+
+
+        ## init office
+        self.villa_room = avango.gua.nodes.TransformNode()
+
+        ## init villa
+        self.villa_geometry = _trimesh_loader.create_geometry_from_file("villa_geometry", "../objects/villa/new-villa.obj", avango.gua.LoaderFlags.DEFAULTS | avango.gua.LoaderFlags.LOAD_MATERIALS | avango.gua.LoaderFlags.MAKE_PICKABLE)
+        self.villa_geometry.Transform.value = avango.gua.make_trans_mat(0.0, -0.55, -0.0) * \
+                                              avango.gua.make_scale_mat(0.5, 0.5, 0.5)
+        
+
+        ## init table
+        self.table_geometry = _trimesh_loader.create_geometry_from_file("table_geometry", "../objects/villa/round_table.obj", avango.gua.LoaderFlags.DEFAULTS | avango.gua.LoaderFlags.MAKE_PICKABLE)
+        self.table_geometry.Transform.value = avango.gua.make_trans_mat(0.0, -0.5, 0.0) * \
+                                              avango.gua.make_scale_mat(7.0, 7.0, 7.0)
+        self.table_geometry.Material.value.set_uniform("ColorMap", "../objects/villa/Texture-2.jpg")
+        self.table_geometry.Material.value.set_uniform("NormalMap", "../objects/villa/round_table_normal.jpg")
+
+        ## init dish 1
+        self.dish1_geometry = _trimesh_loader.create_geometry_from_file("dish1_geometry", "../objects/dish/dish.obj", avango.gua.LoaderFlags.DEFAULTS | avango.gua.LoaderFlags.MAKE_PICKABLE)
+        self.dish1_geometry.Transform.value = avango.gua.make_trans_mat(0.25, 0.25, 0.0) * \
+                                              avango.gua.make_scale_mat(0.1, 0.1, 0.1) * \
+                                              avango.gua.make_trans_mat(0.0, -1.4, 0.0) * \
+                                              avango.gua.make_scale_mat(3.0, 3.0, 3.0)
+        self.dish1_geometry.Material.value.set_uniform("ColorMap", "../objects/dish/red_wood.jpg")
+
+        #self.villa_room.Children.value = [self.villa_geometry, self.table_geometry, self.dish1_geometry]
+        self.villa_room.Children.value = [self.villa_geometry]
+        PARENT_NODE.Children.value.append(self.villa_room)
+
+
+        '''
+        ## init kinect video avatar
+        _video_loader = avango.gua.nodes.Video3DLoader() # get video-3D loader
+        #self.kinect_node = _video_loader.load("kinect_node", "/opt/kinect-resources/shot_lcd_KV2_X_5.ks")
+        #self.kinect_node = _video_loader.load("kinect_node", "/opt/kinect-resources/rgbd-framework/recordings/stepptanz/stepptanz_from_charon.ks")
+        self.kinect_node = _video_loader.load("kinect_node", "/opt/kinect-resources/calib_3dvc/surface_23_24_25_26.ks")
+        self.kinect_node.Transform.value = avango.gua.make_trans_mat(0.0, 0.0, 0.0) * \
+                                           avango.gua.make_rot_mat(180.0,0,1,0) * \
+                                           avango.gua.make_scale_mat(0.12)
+        PARENT_NODE.Children.value.append(self.kinect_node)
+        '''
+
+
+        ## init labyrinth
+        self.labyrinth_room = avango.gua.nodes.TransformNode()
+
+        self.labyrinth_geometry = _trimesh_loader.create_geometry_from_file("labyrinth_geometry", "../objects/labyrinth/labyrinth-textured2.obj", avango.gua.LoaderFlags.DEFAULTS | avango.gua.LoaderFlags.LOAD_MATERIALS)
+
+        
+
+        self.labyrinth_room.Children.value = [self.labyrinth_geometry]
+        PARENT_NODE.Children.value.append(self.labyrinth_room)
+        self.labyrinth_room.Tags.value = ["invisible"]
+
+
+
+        ## init classroom
+        self.classroom_room = avango.gua.nodes.TransformNode()
+
+        self.classroom_geometry = _trimesh_loader.create_geometry_from_file("classroom_geometry", "../objects/classroom/classroom3.obj", avango.gua.LoaderFlags.DEFAULTS | avango.gua.LoaderFlags.LOAD_MATERIALS)
+        self.classroom_geometry.Transform.value = avango.gua.make_trans_mat(0.0, -2.7, -5.0)
+
+        self.classroom_room.Children.value = [self.classroom_geometry]
+        PARENT_NODE.Children.value.append(self.classroom_room)
+        self.classroom_room.Tags.value = ["invisible"]
+
+
+        self.script = SceneScript()
+        self.script.my_constructor(CLASS = self)
+
+        
+
+    ## functions
+    def set_room_number(self):
+        if self.room_number != 3:
+            self.room_number = self.room_number + 1
+            if self.room_number == 2:
+                self.villa_room.Tags.value = ["invisible"]
+                #self.kinect_node.Tags.value = ["invisible"]
+                self.labyrinth_room.Tags.value = []
+
+            else:
+                self.labyrinth_room.Tags.value = ["invisible"]
+                self.classroom_room.Tags.value = []
+
+        else:
+            self.room_number = 1
+            self.villa_room.Tags.value = []
+            #self.kinect_node.Tags.value = []
+            self.classroom_room.Tags.value = ["invisible"]
+            
+        print("room number", self.room_number)
+        #set_to_origin()
+
+
+    #def set_to_origin(self):
+
+
